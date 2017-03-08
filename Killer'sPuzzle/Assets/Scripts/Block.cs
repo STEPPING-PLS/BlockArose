@@ -4,14 +4,18 @@ using System.Collections;
 
 public enum BlockType : byte
 {
-    RED,
+    BLACK,
+    BLUE,
     GREEN,
-    BLUE
+    PURPLE,
+    RED,
+    YELLOW
 }
 public enum BlockStatus : byte
 {
+    NORMAL,
+    DESTROY,
     FALLING,
-    FLASHING,
     DISABLED
 }
 
@@ -35,9 +39,9 @@ public class Block {
     // ブロックの状態
     private BlockStatus status;
     // ブロックの座標
-    private Transform pos;
-    // Imageコンポーネント
-    private Image img;
+    private RectTransform pos;
+    // GameObject
+    private GameObject obj;
 
     // コンストラクタでブロックの位置とType,Statusを設定
     public Block(int x,int y,BlockType type,BlockStatus status)
@@ -72,6 +76,10 @@ public class Block {
         get { return this.blockPosition; }
         set { this.blockPosition = value; }
     }
+    public RectTransform BlockTransform
+    {
+        get { return this.pos; }
+    }
     public BlockType BlockType
     {
         get { return this.type; }
@@ -84,10 +92,10 @@ public class Block {
         set { this.status = value; }
     }
 
-    public Image BlockImage
+    public GameObject BlockObject
     {
-        get { return this.img; }
-        set { this.img = value; }
+        get { return this.obj; }
+        set { this.obj = value; }
     }
     #endregion
 }

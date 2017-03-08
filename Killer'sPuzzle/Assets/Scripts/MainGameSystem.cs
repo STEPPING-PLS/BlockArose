@@ -19,27 +19,33 @@ enum StageStatus: byte
     CONTROLLABLE = 0,
     CONTROLLDISABLED
 }
-public class MainGameSystem : MonoBehaviour {
+public partial class MainGameSystem : MonoBehaviour {
 
     // フリックの状態
     private FlickState flickState;
     // フリックの始点、終点の座標
     private Vector3 beginPoint,endPoint;
-
+    // パズルの盤面を表す配列
     private Block[,] stage;
+    // パズル生成クラス
+    private Spawner spawner;
+
+    // 現在選択中のブロック,移動先のブロック
+    private Block selectedBlock,destBlock;
+
 
 	// Use this for initialization
 	void Start () {
-        stage = new Block[0, 0];
-        stage[0, 0] = new Block(0, 0, BlockType.BLUE, BlockStatus.DISABLED);
-        Spawner sp = new Spawner();
+        stage = new Block[StageSize, StageSize];
+        spawner = new Spawner(ref blocks,StageSize);
+        spawner.InitStage(ref stage);
     }
 	
 	// Update is called once per frame
 	void Update () {
         Flick();
 	}
-
+    // フリック入力関連
     #region
     private void Flick()
     {
@@ -48,16 +54,20 @@ public class MainGameSystem : MonoBehaviour {
             flickState = FlickState.FLICKING;
             Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
             RaycastHit2D hit = Physics2D.Raycast(ray.origin, ray.direction, 10.0f);
-            print("hit!" + hit.collider);
-            if (hit.collider.tag == "Block")
+            if (hit.collider != null)
             {
-                beginPoint = Input.mousePosition;
+                if (hit.collider.tag == "Block")
+                {
+                    print("hit Block" + hit.collider.name);
+                    selectedBlock = hit.collider.gameObject.GetComponent<Block>();
+                    beginPoint = Input.mousePosition;
+                }
             }
         }
         if (Input.GetMouseButtonUp(0) && flickState == FlickState.FLICKING)
         {
             endPoint = Input.mousePosition;
-            GetDirection(beginPoint, endPoint);
+            SwapBlock(GetDirection(beginPoint, endPoint));
 
             flickState = FlickState.FREE;
         }
@@ -101,4 +111,27 @@ public class MainGameSystem : MonoBehaviour {
         }
     }
     #endregion
+
+    private void SwapBlock(FlickDirection dir,ref Block selected)
+    {
+        switch (dir)
+        {
+            case FlickDirection.UP:
+                TraceVertical();
+                break;
+            case FlickDirection.LEFT:
+                break;
+            case FlickDirection.DOWN:
+                break;
+            case FlickDirection.RIGHT:
+                break;
+            default:
+                return;
+        }
+    }
+
+    private void TraceVertical()
+    {
+
+    }
 }
