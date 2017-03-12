@@ -30,7 +30,7 @@ public struct BlockPosition
     public int Y { get; set; }
 }
 
-public class Block {
+public class Block :MonoBehaviour{
 
     // ブロックのインデックス
     private BlockPosition blockPosition;
@@ -43,32 +43,6 @@ public class Block {
     // GameObject
     private GameObject obj;
 
-    // コンストラクタでブロックの位置とType,Statusを設定
-    public Block(int x,int y,BlockType type,BlockStatus status)
-    {
-        this.blockPosition.X = x;
-        this.blockPosition.Y = y;
-        this.BlockType = type;
-        this.BlockStatus = status;
-    }
-    public Block(BlockPosition pos,BlockType type,BlockStatus status)
-    {
-        this.BlockPosition = pos;
-        this.BlockType = type;
-        this.BlockStatus = status;
-    }
-    // ブロックの位置のみを指定した場合はStatusをDISABLEDにする
-    public Block(int x, int y)
-    {
-        this.blockPosition.X = x;
-        this.blockPosition.Y = y;
-        this.status = BlockStatus.DISABLED;
-    }
-	// Update is called once per frame
-	void Update () {
-	
-	}
-
     // プロパティ群
     #region
     public BlockPosition BlockPosition
@@ -79,6 +53,7 @@ public class Block {
     public RectTransform BlockTransform
     {
         get { return this.pos; }
+        set { this.pos = value; }
     }
     public BlockType BlockType
     {

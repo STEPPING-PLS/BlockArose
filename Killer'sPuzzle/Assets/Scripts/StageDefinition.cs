@@ -13,4 +13,16 @@ public partial class MainGameSystem
     // ステージのブロックの状態
     private BlockStatus[,] blockStatus;
 
+
+    // ブロックの入れ替えにかかる時間
+    [SerializeField]
+    private float SwapTime = 1.0f;
+    // パズル生成確率計算に用いる重みの値
+    /*
+     * 生成確率Pは
+     * P = 50 - N*(各色ブロックの数 - 各色ブロック数の平均値)
+     * N = SpawnProbWeightとなる
+     */
+    [SerializeField]
+    private int SpawnProbWeight = 25;
 }
