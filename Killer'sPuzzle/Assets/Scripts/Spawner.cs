@@ -30,8 +30,6 @@ public class BlockInfo {
     public BlockType CalcBlockType() {
         int total = 0;
         int rand = 0;
-        // totalNumは現在生成しようとしているブロックの数に合わせる
-        this.totalNum++;
         average = (float)totalNum / blockTypes;
         // 各色の確率を求めて閾値を格納する
         float[] probs = new float[blockTypes];
@@ -41,7 +39,8 @@ public class BlockInfo {
             total += (int)probs[i];
             //Debug.Log((BlockType)i + "prob? " + probs[i]);
         }
-
+        // ステージ上のブロック数を増やす
+        this.totalNum++;
         rand = UnityEngine.Random.Range(0, (int)probs[blockTypes - 1]);
         // 閾値を見て生成した乱数がどこに該当するか検索
         for (int i = 0; i < probs.Length; i++) {
@@ -61,6 +60,17 @@ public class BlockInfo {
         }
         Debug.LogError("確率決まらなかった　コード間違ってるで");
         return BlockType.BLACK;
+    }
+
+    /// <summary>
+    /// exceptで指定したBlockType以外を返す
+    /// </summary>
+    /// <param name="except"></param>
+    /// <returns></returns>
+    public BlockType CalcBlockType(BlockType except) {
+        BlockType type = (BlockType)UnityEngine.Random.Range(0, blockTypes - 1);
+        if (except != type) return type;
+        else return CalcBlockType(except);
     }
 
     /// <summary>
@@ -128,7 +138,7 @@ public class Spawner {
     /// <param name="posX">ブロックの位置X</param>
     /// <param name="posY">ブロックの位置Y</param>
     /// <returns></returns>
-    private GameObject GenerateBlock(BlockStatus status,BlockType type,int posX,int posY)
+    public GameObject GenerateBlock(BlockStatus status,BlockType type,int posX,int posY)
     {
         Vector3 rectScale = new Vector3(1.0f, 1.0f, 1.0f);
         // 使用できないマスはダミーBlockを格納
@@ -160,8 +170,6 @@ public class Spawner {
         b.BlockObject = obj;
         return obj;
     }
-
-
 
     public BlockInfo BlockInfoProp {
         get { return this.blockInfo; }

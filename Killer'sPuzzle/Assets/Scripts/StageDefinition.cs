@@ -16,7 +16,7 @@ public partial class MainGameSystem
 
     // ブロックの入れ替えにかかる時間
     [SerializeField]
-    private float SwapTime = 1.0f;
+    private float SwapTime = 0.1f;
     // パズル生成確率計算に用いる重みの値
     /*
      * 生成確率Pは

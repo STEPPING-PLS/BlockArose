@@ -14,6 +14,7 @@ public enum BlockType : byte
 public enum BlockStatus : byte
 {
     NORMAL,
+    SWTCHING,
     DESTROY,
     FALLING,
     DISABLED
