@@ -174,4 +174,9 @@ public class Spawner {
     public BlockInfo BlockInfoProp {
         get { return this.blockInfo; }
     }
+
+    public Vector2 GetBlockSize
+    {
+        get { return this.offset; }
+    }
 }

@@ -1,6 +1,6 @@
 ﻿using UnityEngine;
 using DG.Tweening;
-using System.Collections.Generic;
+using System.Collections;
 
 enum FlickDirection: byte
 {
@@ -39,6 +39,8 @@ public partial class MainGameSystem : MonoBehaviour {
     // 現在選択中のブロック,移動先のブロック
     private Block selectedBlock, destBlock;
 
+    private Tween tween;
+
     // Use this for initialization
     void Start() {
         stage = new GameObject[StageSize, StageSize];
@@ -54,6 +56,7 @@ public partial class MainGameSystem : MonoBehaviour {
     // Update is called once per frame
     void Update() {
         Flick();
+        CheckFallBlocks();
     }
     // 初期の盤面で揃っている所があるかチェック
     private bool CheckStage() {
@@ -76,6 +79,7 @@ public partial class MainGameSystem : MonoBehaviour {
                             if (stage[i, j + 1].GetComponent<Block>().BlockType == originType && stage[i, j - 1].GetComponent<Block>().BlockType == originType)
                             {
                                 existMatch = true;
+                                Destroy(stage[i, j]);
                                 stage[i, j] = spawner.GenerateBlock(BlockStatus.NORMAL, spawner.BlockInfoProp.CalcBlockType(originType), i, j);
                             }
                         }
@@ -89,6 +93,7 @@ public partial class MainGameSystem : MonoBehaviour {
                             if (stage[i + 1, j].GetComponent<Block>().BlockType == originType && stage[i - 1, j].GetComponent<Block>().BlockType == originType)
                             {
                                 existMatch = true;
+                                Destroy(stage[i, j]);
                                 stage[i, j] = spawner.GenerateBlock(BlockStatus.NORMAL, spawner.BlockInfoProp.CalcBlockType(originType), i, j);
                             }
                         }
@@ -256,7 +261,7 @@ public partial class MainGameSystem : MonoBehaviour {
             if (TraceBlocks())
             {
                 // 揃っている箇所があるならブロックを削除
-                DeleteBlock();
+                DeleteBlocks();
                 //ブロックの状態を元に戻す
                 if (selected != null)
                     selected.BlockStatus = BlockStatus.NORMAL;
@@ -343,24 +348,85 @@ public partial class MainGameSystem : MonoBehaviour {
         }
         return existMatch;
     }
-    // 削除フラグが立っているマス目のブロクを削除
-    private void DeleteBlock()
+    // 削除フラグが立っているマス目のブロックを削除
+    private void DeleteBlocks()
     {
-        Block deleteTarget;
         for (int i = 0; i < StageSize; i++) {
             for (int j = 0; j < StageSize; j++) {
                 // フラグの立っているマス目のブロックを削除
                 if (deleteTable[i, j]) {
-                    deleteTarget = stage[i, j].GetComponent<Block>();
-                    // 盤面のブロック数の情報を更新
-                    spawner.BlockInfoProp.UpdateBlockInfo(deleteTarget.BlockType);
-                    Destroy(stage[i, j]);
-                    // 削除後はフラグを元に戻す
-                    deleteTable[i, j] = false;
+                    DeleteAnimation(stage[i, j].GetComponent<Block>());
                 }
             }
         }
     }
+    // ブロック削除アニメーション
+    private void DeleteAnimation(Block deleteTarget) {
+        deleteTarget.BlockStatus = BlockStatus.DESTROY;
+        // 盤面のブロック数の情報を更新
+        spawner.BlockInfoProp.UpdateBlockInfo(deleteTarget.BlockType);
+        deleteTarget.BlockTransform.DOScale(Vector3.zero, DeleteTime).OnComplete(() =>
+        {
+            // 削除後はフラグを元に戻す
+            deleteTable[deleteTarget.BlockPosition.X, deleteTarget.BlockPosition.Y] = false;
+            Destroy(deleteTarget.BlockObject);
+        });
+    }
 
+    #endregion
+
+    // ブロック落下処理
+    #region
+    // 下のマスが空の箇所を探し、ブロックを落下させる
+    private void CheckFallBlocks()
+    {
+        Block target;
+        for (int i = StageSize - 1; i + 1 > 0; i--) {
+            for (int j = 0; j < StageSize; j++) {
+                // ブロックが空のマスを探し、その上のマス
+                if (stage[i, j] == null && i > 0 && stage[i - 1, j] != null) {
+                    target = stage[i - 1, j].GetComponent<Block>();
+                    if (target.BlockStatus == BlockStatus.NORMAL) {
+                        tween.SetDelay(DelayAfterDeleted);
+                        FallBlock(target);
+                    }
+                }
+            }
+        }
+    }
+    // 指定したブロックを適切な位置まで落下させる
+    private void FallBlock(Block target)
+    {
+        BlockPosition nextPos = new BlockPosition(target.BlockPosition.X + 1, target.BlockPosition.Y);
+        target.BlockStatus = BlockStatus.FALLING;
+        // 下のマスが配列の外でなく、下のマスが空の場合
+        for (; nextPos.X < StageSize && stage[nextPos.X, nextPos.Y] == null;) {
+            // 次の座標を計算
+            float nextPosY = target.BlockTransform.anchoredPosition.y - spawner.GetBlockSize.y;
+            stage[nextPos.X, nextPos.Y] = target.BlockObject;
+            stage[nextPos.X - 1, nextPos.Y] = null;
+            // ブロック1マス分下へ移動(duration=ブロックの大きさ/落下速度)
+            target.BlockTransform.DOLocalMoveY(nextPosY, FallSpeed).OnComplete(() => {
+                // 移動し終わったら次のマスを見てさらに下へ移動できるか見る
+                target.BlockPosition = nextPos;
+                nextPos.X++;
+            });
+        }
+
+        // これ以上下に移動できない場合終了
+        target.BlockStatus = BlockStatus.NORMAL;
+        // 落下後の盤面で消すブロックがあるかチェック
+        if (TraceBlocks())
+        {
+            DeleteBlocks();
+        }
+    }
+    #endregion
+
+    // ブロック補充処理
+    #region
+    private void SupplyBlocks() {
+
+    }
     #endregion
 }
