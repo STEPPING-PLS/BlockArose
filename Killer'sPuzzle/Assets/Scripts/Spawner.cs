@@ -26,7 +26,11 @@ public class BlockInfo {
         weight = probWeight;
     }
 
-    // 次に生成するブロックの種類を求める
+    #region
+    /// <summary>
+    /// ブロックの生成確率を決め、ステージ上のブロックの個数を更新する
+    /// </summary>
+    /// <returns></returns>
     public BlockType CalcBlockType() {
         int total = 0;
         int rand = 0;
@@ -64,14 +68,19 @@ public class BlockInfo {
 
     /// <summary>
     /// exceptで指定したBlockType以外を返す
+    /// 決定したBlockTypeよりブロックの個数を更新
     /// </summary>
     /// <param name="except"></param>
     /// <returns></returns>
     public BlockType CalcBlockType(BlockType except) {
         BlockType type = (BlockType)UnityEngine.Random.Range(0, blockTypes - 1);
-        if (except != type) return type;
+        if (except != type) {
+            totalNum++;
+            return type;
+        } 
         else return CalcBlockType(except);
     }
+    #endregion
 
     /// <summary>
     /// ブロック削除時に呼ぶ関数
@@ -79,10 +88,11 @@ public class BlockInfo {
     /// ステージ上のブロックの総数も1つ減らす
     /// </summary>
     /// <param name="type"></param>
-    public void UpdateBlockInfo(BlockType type) {
+    public void UpdateBlockInfoOnDelete(BlockType type) {
         blockNums[(int)type]--;
         totalNum--;
     }
+
 }
 public class Spawner {
 

@@ -18,11 +18,11 @@ public partial class MainGameSystem
     [SerializeField]
     private float SwapTime = 0.1f;
     [SerializeField]
-    private float FallSpeed = 1.0f;
+    private float FallTime = 1.0f;
     [SerializeField]
     private float DeleteTime = 1.0f;
     [SerializeField]
-    private float DelayAfterDeleted = 0.5f;
+    private float DelayAfterDeleted = 0.01f;
 
     // パズル生成確率計算に用いる重みの値
     /*

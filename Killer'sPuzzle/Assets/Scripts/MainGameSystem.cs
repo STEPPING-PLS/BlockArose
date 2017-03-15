@@ -58,29 +58,30 @@ public partial class MainGameSystem : MonoBehaviour {
         Flick();
         CheckFallBlocks();
     }
+    // 盤面初期化時の処理
+    #region
     // 初期の盤面で揃っている所があるかチェック
     private bool CheckStage() {
         bool existMatch = false;
         // 比較元となるブロックの色
-        BlockType originType;
+        Block origin;
         for (int i = 0; i < stage.GetLength(0); i++)
         {
             for (int j = 0; j < stage.GetLength(1); j++)
             {
                 if (stage[i, j] != null)
                 {
-                    originType = stage[i, j].GetComponent<Block>().BlockType;
+                    origin = stage[i, j].GetComponent<Block>();
                     // 配列の外を探索しない
                     if (j + 1 < StageSize && j > 0)
                     {
                         if (stage[i, j + 1] != null && stage[i, j - 1] != null)
                         {
                             // 左右のブロックが同じ色である場合,削除フラグを立てる
-                            if (stage[i, j + 1].GetComponent<Block>().BlockType == originType && stage[i, j - 1].GetComponent<Block>().BlockType == originType)
+                            if (stage[i, j + 1].GetComponent<Block>().BlockType == origin.BlockType && stage[i, j - 1].GetComponent<Block>().BlockType == origin.BlockType)
                             {
                                 existMatch = true;
-                                Destroy(stage[i, j]);
-                                stage[i, j] = spawner.GenerateBlock(BlockStatus.NORMAL, spawner.BlockInfoProp.CalcBlockType(originType), i, j);
+                                ReplaceBlock(origin);
                             }
                         }
                     }
@@ -90,11 +91,10 @@ public partial class MainGameSystem : MonoBehaviour {
                         if (stage[i + 1, j] != null && stage[i - 1, j] != null)
                         {
                             // 上下のブロックが同じ色である場合,削除フラグを立てる
-                            if (stage[i + 1, j].GetComponent<Block>().BlockType == originType && stage[i - 1, j].GetComponent<Block>().BlockType == originType)
+                            if (stage[i + 1, j].GetComponent<Block>().BlockType == origin.BlockType && stage[i - 1, j].GetComponent<Block>().BlockType == origin.BlockType)
                             {
                                 existMatch = true;
-                                Destroy(stage[i, j]);
-                                stage[i, j] = spawner.GenerateBlock(BlockStatus.NORMAL, spawner.BlockInfoProp.CalcBlockType(originType), i, j);
+                                ReplaceBlock(origin);
                             }
                         }
                     }
@@ -103,6 +103,16 @@ public partial class MainGameSystem : MonoBehaviour {
         }
         return existMatch;
     }
+
+    private void ReplaceBlock(Block target) {
+        BlockPosition pos = target.BlockPosition;
+        BlockType type = target.BlockType;
+        Destroy(stage[pos.X, pos.Y]);
+        spawner.BlockInfoProp.UpdateBlockInfoOnDelete(type);
+        stage[pos.X,pos.Y] = spawner.GenerateBlock(BlockStatus.NORMAL, spawner.BlockInfoProp.CalcBlockType(type), pos.X, pos.Y);
+    }
+    #endregion
+
     // フリック入力関連
     #region
     private void Flick()
@@ -364,7 +374,7 @@ public partial class MainGameSystem : MonoBehaviour {
     private void DeleteAnimation(Block deleteTarget) {
         deleteTarget.BlockStatus = BlockStatus.DESTROY;
         // 盤面のブロック数の情報を更新
-        spawner.BlockInfoProp.UpdateBlockInfo(deleteTarget.BlockType);
+        spawner.BlockInfoProp.UpdateBlockInfoOnDelete(deleteTarget.BlockType);
         deleteTarget.BlockTransform.DOScale(Vector3.zero, DeleteTime).OnComplete(() =>
         {
             // 削除後はフラグを元に戻す
@@ -387,7 +397,6 @@ public partial class MainGameSystem : MonoBehaviour {
                 if (stage[i, j] == null && i > 0 && stage[i - 1, j] != null) {
                     target = stage[i - 1, j].GetComponent<Block>();
                     if (target.BlockStatus == BlockStatus.NORMAL) {
-                        tween.SetDelay(DelayAfterDeleted);
                         FallBlock(target);
                     }
                 }
@@ -397,6 +406,7 @@ public partial class MainGameSystem : MonoBehaviour {
     // 指定したブロックを適切な位置まで落下させる
     private void FallBlock(Block target)
     {
+        print("落下メソッド from " + target.BlockPosition.X + " : " + target.BlockPosition.Y);
         BlockPosition nextPos = new BlockPosition(target.BlockPosition.X + 1, target.BlockPosition.Y);
         target.BlockStatus = BlockStatus.FALLING;
         // 下のマスが配列の外でなく、下のマスが空の場合
@@ -406,15 +416,15 @@ public partial class MainGameSystem : MonoBehaviour {
             stage[nextPos.X, nextPos.Y] = target.BlockObject;
             stage[nextPos.X - 1, nextPos.Y] = null;
             // ブロック1マス分下へ移動(duration=ブロックの大きさ/落下速度)
-            target.BlockTransform.DOLocalMoveY(nextPosY, FallSpeed).OnComplete(() => {
+            target.BlockTransform.DOLocalMoveY(nextPosY, FallTime).OnComplete(() => {
                 // 移動し終わったら次のマスを見てさらに下へ移動できるか見る
                 target.BlockPosition = nextPos;
                 nextPos.X++;
             });
         }
 
-        // これ以上下に移動できない場合終了
-        target.BlockStatus = BlockStatus.NORMAL;
+        //// これ以上下に移動できない場合終了
+        //target.BlockStatus = BlockStatus.NORMAL;
         // 落下後の盤面で消すブロックがあるかチェック
         if (TraceBlocks())
         {
@@ -426,7 +436,21 @@ public partial class MainGameSystem : MonoBehaviour {
     // ブロック補充処理
     #region
     private void SupplyBlocks() {
+        GameObject obj;
+        Block b;
+        for (int j = 0; j < StageSize; j++) {
+            if (stage[0, j] == null) {
+                print("補充するやで " + 0 + " : "  + j);
+                // 一番上の列のさらに一つ上のマス目に生成
+                obj = spawner.GenerateBlock(BlockStatus.FALLING, spawner.BlockInfoProp.CalcBlockType(), -1, j);
+                b = obj.GetComponent<Block>();
+                b.BlockTransform.DOLocalMoveY(b.BlockTransform.anchoredPosition.y - spawner.GetBlockSize.y, FallTime).OnComplete(() =>
+                {
+                    FallBlock(b);
+                });
 
+            }
+        }
     }
     #endregion
 }
