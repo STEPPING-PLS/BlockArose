@@ -45,25 +45,27 @@ public class BlockInfo {
         }
         // ステージ上のブロック数を増やす
         this.totalNum++;
+        if (totalNum > 64) Debug.LogError("overflow");
         rand = UnityEngine.Random.Range(0, (int)probs[blockTypes - 1]);
         // 閾値を見て生成した乱数がどこに該当するか検索
-        for (int i = 0; i < probs.Length; i++) {
+        int type = 0;
+        for (type = 0; type < probs.Length; type++) {
             // 生成された色のカウントを1つ増やす
-            if (i == 0)
+            if (type == 0)
             {
-                if (0 <= rand && rand < (int)probs[i])
+                if (0 <= rand && rand < (int)probs[type])
                 {
-                    this.blockNums[i]++;
-                    return (BlockType)i;
+                    this.blockNums[type]++;
+                    break;
                 }
             }
-            else if ((int)probs[i - 1] <= rand && rand < (int)probs[i]) {
-                this.blockNums[i]++;
-                return (BlockType)i;
+            else if ((int)probs[type - 1] <= rand && rand <= (int)probs[type]) {
+                this.blockNums[type]++;
+                break;
             }
         }
-        Debug.LogError("確率決まらなかった　コード間違ってるで");
-        return BlockType.BLACK;
+        //Debug.LogError("Error in CalcBlockType" + "  totalNum? " + totalNum);
+        return (BlockType)type;
     }
 
     /// <summary>
@@ -109,7 +111,7 @@ public class Spawner {
     // MainGameSystemからprefabの参照先を取得
     public Spawner(ref GameObject[] objs,int StageSize,int weight) {
         prefabs = objs;
-        parentCanvas = GameObject.Find("Canvas").GetComponent<Transform>();
+        parentCanvas = GameObject.Find("Field").GetComponent<Transform>();
         // ステージの大きさなどの変数を計算
         initPos = new Vector2(-472.0f, 492.0f);
         offset = new Vector2(Screen.width / StageSize, Screen.width / StageSize);
@@ -139,6 +141,8 @@ public class Spawner {
     }
     #endregion
 
+    // ブロック生成関数
+    #region
     /// <summary>
     /// ブロックのインスタンスを生成し
     /// 各パラメータを設定する関数
@@ -180,9 +184,55 @@ public class Spawner {
         b.BlockObject = obj;
         return obj;
     }
-
+    /// <summary>
+    /// ブロック補充用関数
+    /// </summary>
+    /// <param name="status">FALLING</param>
+    /// <param name="type">random</param>
+    /// <param name="posX">補充先配列X</param>
+    /// <param name="posY">補充先配列Y</param>
+    /// <param name="rectX">フィールド座標X</param>
+    /// <param name="rectY">フィールド座標Y</param>
+    /// <returns></returns>
+    public GameObject SupplyBlock(BlockStatus status, BlockType type, int posX, int posY,int connection)
+    {
+        Vector3 rectScale = new Vector3(1.0f, 1.0f, 1.0f);
+        // 使用できないマスはダミーBlockを格納
+        if (status == BlockStatus.DISABLED)
+        {
+            GameObject dummy = new GameObject("Disabled");
+            Block block = dummy.AddComponent<Block>();
+            block.BlockStatus = status;
+            block.BlockPosition = new BlockPosition(posX, posY);
+            block.BlockObject = dummy;
+            return dummy;
+        }
+        // BlockTypeに応じたブロックを生成
+        GameObject obj = UnityEngine.Object.Instantiate(this.prefabs[(int)type]);
+        // Canvas内での位置と大きさを調整
+        obj.transform.SetParent(parentCanvas);
+        RectTransform rect = obj.GetComponent<RectTransform>();
+        rect.localScale = rectScale;
+        rect.localPosition = Vector3.zero;
+        rect.anchoredPosition = initPos + new Vector2(offset.x * posY, -offset.y * posX + offset.y*connection);
+        /* Blockコンポーネントの値を適切な値にする
+         * 配列内の座標,ブロックの種類,GameObjectの参照先を保存しておく
+         */
+        Block b = obj.AddComponent<Block>();
+        b.BlockStatus = status;
+        b.BlockType = type;
+        b.BlockPosition = new BlockPosition(posX, posY);
+        b.BlockTransform = rect;
+        b.BlockObject = obj;
+        return obj;
+    }
+    #endregion
     public BlockInfo BlockInfoProp {
         get { return this.blockInfo; }
+    }
+
+    public Vector2 GetInitPos {
+        get { return this.initPos; }
     }
 
     public Vector2 GetBlockSize
