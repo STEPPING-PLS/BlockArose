@@ -18,11 +18,11 @@ public partial class MainGameSystem
     [SerializeField]
     private float SwapTime = 2.0f;
     [SerializeField]
-    // ブロック1マス落下にかかる時間
-    private float FallTime = 1.0f;
-    [SerializeField]
     // ブロック削除にかかる時間
     private float DeleteTime = 1.0f;
+    [SerializeField]
+    // ブロック1マス落下にかかる時間
+    private float FallTime = 1.0f;
     // パズル生成確率計算に用いる重みの値
     /*
      * 生成確率Pは
@@ -31,11 +31,4 @@ public partial class MainGameSystem
      */
     [SerializeField]
     private int SpawnProbWeight = 25;
-
-    [SerializeField]
-    // コンボ継続時間
-    private float ComboTimer = 0.0f;
-    [SerializeField]
-    // 落下終了後からコンボリセットまでの猶予時間
-    private float ResetDelay = 0.1f;
 }

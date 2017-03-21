@@ -4,30 +4,9 @@ using DG.Tweening;
 using System;
 using System.Collections;
 
-enum FlickDirection: byte
-{
-    TAP = 0,
-    UP,
-    DOWN,
-    LEFT,
-    RIGHT
-}
-enum FlickState
-{
-    FLICKING,
-    FREE
-}
-enum StageStatus: byte
-{
-    CONTROLLABLE = 0,
-    CONTROLLDISABLED
-}
+
 public partial class MainGameSystem : MonoBehaviour {
 
-    // フリックの状態
-    private FlickState flickState;
-    // フリックの始点、終点の座標
-    private Vector3 beginPoint, endPoint;
     // パズルの盤面を表す配列 [i,j] = [PosX,PosY]
     /*
      * ↓→Y
@@ -37,20 +16,17 @@ public partial class MainGameSystem : MonoBehaviour {
     private bool[,] deleteTable;
     // パズル生成クラス
     private Spawner spawner;
-
-    // 現在選択中のブロック,移動先のブロック
-    private Block selectedBlock, destBlock;
-
-    // 現在のチェイン数
-    private int Chain = 0;
-    // 現在の最大チェイン数
-    private int MaxChain = 0;
-    // Textコンポーネント
+    // ターン管理クラス
     [SerializeField]
-    private Text ChainText, MaxChainText;
+    private TurnManager turnManager;
+    // チェイン管理クラス
+    [SerializeField]
+    private ChainManager chainManager;
 
     // Use this for initialization
     void Start() {
+        turnManager = this.gameObject.GetComponent<TurnManager>();
+        chainManager = this.gameObject.GetComponent<ChainManager>();
         stage = new GameObject[StageSize, StageSize];
         deleteTable = new bool[StageSize, StageSize];
         spawner = new Spawner(ref blocks, StageSize, this.SpawnProbWeight);
@@ -61,11 +37,54 @@ public partial class MainGameSystem : MonoBehaviour {
         }
     }
 
-    // Update is called once per frame
-    void Update() {
-        Flick();
-        //CheckFallBlocks();
+    /// <summary>
+    /// 入れ替え先のブロックを取得する関数
+    /// 取得できたらSwtichBlock関数を呼ぶ
+    /// </summary>
+    /// <param name="dir"></param>
+    public void OnFlicked(FlickDirection dir,ref Block selectedBlock,ref Block destBlock)
+    {
+        print("dir?" + dir);
+        switch (dir)
+        {
+            case FlickDirection.UP:
+                // 配列の外,またはブロックが存在しない場合return
+                if (selectedBlock.BlockPosition.X - 1 < 0 ||
+                    stage[selectedBlock.BlockPosition.X - 1, selectedBlock.BlockPosition.Y] == null) return;
+
+                destBlock = stage[selectedBlock.BlockPosition.X - 1, selectedBlock.BlockPosition.Y].GetComponent<Block>();
+                // BlockStatusがNORMALじゃなければreturn
+                if (destBlock.BlockStatus != BlockStatus.NORMAL) return;
+                break;
+            case FlickDirection.LEFT:
+                if (selectedBlock.BlockPosition.Y - 1 < 0 ||
+                    stage[selectedBlock.BlockPosition.X, selectedBlock.BlockPosition.Y - 1] == null) return;
+
+                destBlock = stage[selectedBlock.BlockPosition.X, selectedBlock.BlockPosition.Y - 1].GetComponent<Block>();
+                if (destBlock.BlockStatus != BlockStatus.NORMAL) return;
+                break;
+            case FlickDirection.DOWN:
+                if (selectedBlock.BlockPosition.X + 1 >= stage.GetLength(0) ||
+                    stage[selectedBlock.BlockPosition.X + 1, selectedBlock.BlockPosition.Y] == null) return;
+
+                destBlock = stage[selectedBlock.BlockPosition.X + 1, selectedBlock.BlockPosition.Y].GetComponent<Block>();
+                if (destBlock.BlockStatus != BlockStatus.NORMAL) return;
+                break;
+            case FlickDirection.RIGHT:
+                if (selectedBlock.BlockPosition.Y + 1 >= stage.GetLength(1) ||
+                     stage[selectedBlock.BlockPosition.X, selectedBlock.BlockPosition.Y + 1] == null) return;
+
+                destBlock = stage[selectedBlock.BlockPosition.X, selectedBlock.BlockPosition.Y + 1].GetComponent<Block>();
+                if (destBlock.BlockStatus != BlockStatus.NORMAL) return;
+                break;
+            default:
+                return;
+        }
+        // 盤面(stage[,])上でのGameObjectを入れ替え
+        if (selectedBlock.BlockStatus == BlockStatus.NORMAL && destBlock.BlockStatus == BlockStatus.NORMAL)
+            StartCoroutine(SwitchBlock(selectedBlock, destBlock));
     }
+
     // 盤面初期化時の処理
     #region
     // 初期の盤面で揃っている所があるかチェック
@@ -121,139 +140,9 @@ public partial class MainGameSystem : MonoBehaviour {
     }
     #endregion
 
-    // フリック入力関連
-    #region
-    private void Flick()
-    {
-        // 左マウス押下時にブロックを取得
-        if (Input.GetMouseButtonDown(0) && flickState == FlickState.FREE)
-        {
-            flickState = FlickState.FLICKING;
-            Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
-            RaycastHit2D hit = Physics2D.Raycast(ray.origin, ray.direction, 10.0f);
-            selectedBlock = null; // 選択中のブロックを一旦nullにしておく
-            if (hit.collider != null)
-            {
-                if (hit.collider.tag.Equals("Block"))
-                {
-                    selectedBlock = hit.collider.gameObject.GetComponent<Block>();
-                    print("selected Block: " + selectedBlock.BlockPosition.X + ":" + selectedBlock.BlockPosition.Y + " BlockStatus : " + selectedBlock.BlockStatus);
-                    beginPoint = Input.mousePosition;
-                }
-            }
-        }
-        // 左マウスボタン離した時にフリック方向を取得
-        if (Input.GetMouseButtonUp(0) && flickState == FlickState.FLICKING)
-        {
-            endPoint = Input.mousePosition;
-            // 選択中のブロックが存在し、BlockStatusがNORMALなら
-            if (selectedBlock != null && selectedBlock.BlockStatus == BlockStatus.NORMAL)
-            {
-                // 取得した距離からブロックを入れ替え
-                OnFlicked(GetDirection(beginPoint, endPoint), selectedBlock);
-            }
-            // 処理が終わったら選択中のブロックと対象のブロックを初期化
-            selectedBlock = null;
-            destBlock = null;
-            flickState = FlickState.FREE;
-        }
-    }
-
-    private FlickDirection GetDirection(Vector3 begin, Vector3 end)
-    {
-        float dirX, dirY;
-        dirX = end.x - begin.x;
-        dirY = end.y - begin.y;
-        if (Mathf.Abs(dirX) < 135.0f && Mathf.Abs(dirY) < 135.0f)
-        {
-            print("tapped : dirX : " + dirX + "dirY : " + dirY);
-            return FlickDirection.TAP;
-        }
-        // 横方向のフリックの場合
-        if (Mathf.Abs(dirX) > Mathf.Abs(dirY))
-        {
-            // 左方向への入力
-            if (dirX < 0)
-            {
-                return FlickDirection.LEFT;
-            }
-            else
-            {
-                return FlickDirection.RIGHT;
-            }
-        }
-        // 縦方向のフリックの場合
-        if (Mathf.Abs(dirX) < Mathf.Abs(dirY))
-        {
-            // 下方向への入力
-            if (dirY < 0)
-            {
-                return FlickDirection.DOWN;
-            }
-            else
-            {
-                return FlickDirection.UP;
-            }
-
-        }
-        else
-        {
-            return FlickDirection.TAP;
-        }
-    }
-
-    /// <summary>
-    /// 入れ替え先のブロックを取得する関数
-    /// 取得できたらSwtichBlock関数を呼ぶ
-    /// </summary>
-    /// <param name="dir"></param>
-    private void OnFlicked(FlickDirection dir, Block selectedBlock)
-    {
-        print("dir?" + dir);
-        switch (dir)
-        {
-            case FlickDirection.UP:
-                // 配列の外,またはブロックが存在しない場合return
-                if (selectedBlock.BlockPosition.X - 1 < 0 ||
-                    stage[selectedBlock.BlockPosition.X - 1, selectedBlock.BlockPosition.Y] == null) return;
-
-                destBlock = stage[selectedBlock.BlockPosition.X - 1, selectedBlock.BlockPosition.Y].GetComponent<Block>();
-                // BlockStatusがNORMALじゃなければreturn
-                if (destBlock.BlockStatus != BlockStatus.NORMAL) return;
-                break;
-            case FlickDirection.LEFT:
-                if (selectedBlock.BlockPosition.Y - 1 < 0 ||
-                    stage[selectedBlock.BlockPosition.X, selectedBlock.BlockPosition.Y - 1] == null) return;
-
-                destBlock = stage[selectedBlock.BlockPosition.X, selectedBlock.BlockPosition.Y - 1].GetComponent<Block>();
-                if (destBlock.BlockStatus != BlockStatus.NORMAL) return;
-                break;
-            case FlickDirection.DOWN:
-                if (selectedBlock.BlockPosition.X + 1 >= stage.GetLength(0) ||
-                    stage[selectedBlock.BlockPosition.X + 1, selectedBlock.BlockPosition.Y] == null) return;
-
-                destBlock = stage[selectedBlock.BlockPosition.X + 1, selectedBlock.BlockPosition.Y].GetComponent<Block>();
-                if (destBlock.BlockStatus != BlockStatus.NORMAL) return;
-                break;
-            case FlickDirection.RIGHT:
-                if (selectedBlock.BlockPosition.Y + 1 >= stage.GetLength(1) ||
-                     stage[selectedBlock.BlockPosition.X, selectedBlock.BlockPosition.Y + 1] == null) return;
-
-                destBlock = stage[selectedBlock.BlockPosition.X, selectedBlock.BlockPosition.Y + 1].GetComponent<Block>();
-                if (destBlock.BlockStatus != BlockStatus.NORMAL) return;
-                break;
-            default:
-                return;
-        }
-        // 盤面(stage[,])上でのGameObjectを入れ替え
-        if (selectedBlock.BlockStatus == BlockStatus.NORMAL && destBlock.BlockStatus == BlockStatus.NORMAL)
-            SwitchBlock(selectedBlock, destBlock);
-    }
-    #endregion
-
     // ブロック入れ替え処理
     #region
-    private void SwitchBlock(Block selected, Block dest)
+    IEnumerator SwitchBlock(Block selected, Block dest)
     {
         //ブロックの状態を変える
         selected.BlockStatus = BlockStatus.SWTCHING;
@@ -269,31 +158,32 @@ public partial class MainGameSystem : MonoBehaviour {
         selected.BlockPosition = dest.BlockPosition;
         dest.BlockPosition = tmpPos;
         // ※ブロックの座標を入れ替える
-        Vector3 selectedPos = selected.BlockTransform.anchoredPosition;
-        Vector3 destPos = dest.BlockTransform.anchoredPosition;
-        selected.BlockTransform.DOLocalMove(destPos, SwapTime / 60.0f);
-        dest.BlockTransform.DOLocalMove(selectedPos, SwapTime / 60.0f).OnComplete(() => {
-            // ブロックを入れ替えた時点で一旦ブロックの状態を戻す
-            selected.BlockStatus = BlockStatus.NORMAL;
-            dest.BlockStatus = BlockStatus.NORMAL;
-
-            // 縦横にselectedBlock,destBlockを基準にして走査
-            if (TraceBlocks(selected) || TraceBlocks(dest))
-            {
-                // 揃っている箇所があるならブロックを削除
-                CheckDeleteBlocks(selected, dest);
-            }
-            else
-            {
-                // 揃っていないならブロックを元に戻す
-                RevertBlock(selected, dest);
-            }
-        });
+        Vector2 selectedPos = selected.BlockTransform.anchoredPosition;
+        Vector2 destPos = dest.BlockTransform.anchoredPosition;
+        selected.StartCoroutine(selected.MoveBlock(destPos,SwapTime));
+        dest.StartCoroutine(dest.MoveBlock(selectedPos, SwapTime));
+        // ブロック移動終了まで待機
+        while (selected.BlockStatus != BlockStatus.NORMAL && dest.BlockStatus != BlockStatus.NORMAL) {
+            yield return new WaitForEndOfFrame();
+        }
+        bool existMatch = (TraceBlocks(selected) | TraceBlocks(dest));
+        // 縦横にselectedBlock,destBlockを基準にして走査
+        if (existMatch)
+        {
+            // 揃っている箇所があるならブロックを削除
+            CheckDeleteBlocks(selected, dest);
+        }
+        else
+        {
+            // 揃っていないならブロックを元に戻す
+            StartCoroutine(RevertBlock(selected, dest));
+        }
+        yield return 0;
 
         /**********この辺でパズル入れ替えアニメーションなどを挟む*************/
     }
     // ブロックが揃ってない時元に戻す処理
-    private void RevertBlock(Block selected, Block dest) {
+    IEnumerator RevertBlock(Block selected, Block dest) {
         // ブロックの状態を移動中のものに変える
         selected.BlockStatus = BlockStatus.SWTCHING;
         dest.BlockStatus = BlockStatus.SWTCHING;
@@ -309,14 +199,17 @@ public partial class MainGameSystem : MonoBehaviour {
         // ※ブロックの座標を入れ替える
         Vector3 selectedPos = selected.BlockTransform.anchoredPosition;
         Vector3 destPos = dest.BlockTransform.anchoredPosition;
-        selected.BlockTransform.DOLocalMove(destPos, SwapTime / 60.0f);
-        dest.BlockTransform.DOLocalMove(selectedPos, SwapTime / 60.0f).OnComplete(() => {
-            // 移動終了後ブロックの状態を元に戻す
-            selected.BlockStatus = BlockStatus.NORMAL;
-            dest.BlockStatus = BlockStatus.NORMAL;
-            // ブロックの位置を戻した時に落下するかどうか判別
-            CheckFallBlocks();
-        });
+        selected.StartCoroutine(selected.MoveBlock(destPos,SwapTime));
+        dest.StartCoroutine(dest.MoveBlock(selectedPos, SwapTime));
+        // 移動終了まで待機
+        while (selected.BlockStatus != BlockStatus.NORMAL || dest.BlockStatus != BlockStatus.NORMAL)
+        {
+            yield return new WaitForEndOfFrame();
+        }
+
+        // ブロックの位置を戻した時に落下するかどうか判別
+        StartCoroutine(CheckFallBlocks());
+        yield return 0;
     }
     #endregion
 
@@ -453,6 +346,24 @@ public partial class MainGameSystem : MonoBehaviour {
     {
         Block[] targets = new Block[0];
         int x = 0;
+
+        // ターンの継続判定,チェイン数の更新を行う
+        if (turnManager.ChainTimerProp > 0)
+        {
+            // チェイン継続処理
+            chainManager.PlusChainNum();
+            // タイマーにチェイン継続時間をセットする
+            turnManager.SetChainTimer(DeleteTime + FallTime*GetVerticalMatch());
+        }
+        else
+        {
+            // チェインリセット処理
+            chainManager.ResetChainNum();
+            // タイマーにチェイン継続時間をセットする
+            turnManager.SetChainTimer(DeleteTime + FallTime * GetVerticalMatch());
+        }
+
+        // チェイン判定終了後ブロックの削除を開始する
         for (int i = StageSize - 1; i + 1 > 0; i--) {
             for (int j = 0; j < StageSize; j++) {
                 // フラグの立っているマス目のブロックを削除
@@ -474,6 +385,23 @@ public partial class MainGameSystem : MonoBehaviour {
     {
         Block[] targets = new Block[0];
         int x = 0;
+
+        // ターンの継続判定,チェイン数の更新を行う
+        if (turnManager.ChainTimerProp > 0)
+        {
+            // チェイン継続処理
+            chainManager.PlusChainNum();
+            // タイマーにチェイン継続時間をセットする
+            turnManager.SetChainTimer(DeleteTime + FallTime * GetVerticalMatch());
+        }
+        else
+        {
+            // チェインリセット処理
+            chainManager.ResetChainNum();
+            // タイマーにチェイン継続時間をセットする
+            turnManager.SetChainTimer(DeleteTime + FallTime * GetVerticalMatch());
+        }
+        // チェイン判定終了後ブロックの落下を開始
         for (int i = StageSize - 1; i + 1 > 0; i--)
         {
             for (int j = 0; j < StageSize; j++)
@@ -494,19 +422,32 @@ public partial class MainGameSystem : MonoBehaviour {
             StartCoroutine(DeleteBlock(targets, selected, dest));
         }
     }
+
+    // 削除するブロックが縦にいくつ繋がっているか数える関数
+    private int GetVerticalMatch() {
+        int match = 0;
+        for (int j = 0; j < StageSize; j++) {
+            int cnt = 0;
+            for (int i = 0; i < StageSize; i++) {
+                if (deleteTable[i, j]) {
+                    cnt++;
+                    if (match < cnt) match = cnt;
+                }
+            }
+        }
+        return match;
+    }
     // ブロック削除アニメーション
     IEnumerator DeleteBlock(Block[] deleteTargets)
     {
         BlockPosition[] empty = new BlockPosition[deleteTargets.Length];
-        bool deleted = false;
         for (int i = 0; i < deleteTargets.Length; i++) {
             deleteTargets[i].BlockStatus = BlockStatus.DESTROY;
             empty[i] = deleteTargets[i].BlockPosition;
             spawner.BlockInfoProp.UpdateBlockInfoOnDelete(deleteTargets[i].BlockType);
-            deleteTargets[i].BlockTransform.DOScale(Vector3.zero, DeleteTime).OnComplete(() => {
-                deleted = true;
-            });
+            deleteTargets[i].StartCoroutine(deleteTargets[i].DeleteBlock(DeleteTime));
         }
+        /*
         // チェイン数を加算
         CurrentChainProp++;
         ChainText.text = "Chain " + this.CurrentChainProp.ToString();
@@ -516,9 +457,10 @@ public partial class MainGameSystem : MonoBehaviour {
             MaxChainProp = CurrentChainProp;
             MaxChainText.text = "MaxChain " + this.MaxChainProp.ToString();
         }
+        */
 
         // ブロック削除が完了するまで待機
-        while (!deleted) { yield return new WaitForEndOfFrame(); }
+        while (deleteTargets[0].BlockStatus != BlockStatus.DELETED) { yield return new WaitForEndOfFrame(); }
 
         // ブロック削除が完了しているのでステージの状態を書き換える
         for (int i = 0; i < deleteTargets.Length; i++) {
@@ -534,16 +476,15 @@ public partial class MainGameSystem : MonoBehaviour {
     IEnumerator DeleteBlock(Block[] deleteTargets, Block selected, Block dest)
     {
         BlockPosition[] empty = new BlockPosition[deleteTargets.Length];
-        bool deleted = false;
         for (int i = 0; i < deleteTargets.Length; i++)
         {
             deleteTargets[i].BlockStatus = BlockStatus.DESTROY;
             empty[i] = deleteTargets[i].BlockPosition;
             spawner.BlockInfoProp.UpdateBlockInfoOnDelete(deleteTargets[i].BlockType);
-            deleteTargets[i].BlockTransform.DOScale(Vector3.zero, DeleteTime).OnComplete(() => {
-                deleted = true;
-            });
+            deleteTargets[i].StartCoroutine(deleteTargets[i].DeleteBlock(DeleteTime));
         }
+
+        /*
         // チェイン数を加算
         CurrentChainProp++;
         ChainText.text = "Chain " + this.CurrentChainProp.ToString();
@@ -553,9 +494,10 @@ public partial class MainGameSystem : MonoBehaviour {
             MaxChainProp = CurrentChainProp;
             MaxChainText.text = "MaxChain " + this.MaxChainProp.ToString();
         }
+        */
 
         // ブロック削除が完了するまで待機
-        while (!deleted) { yield return new WaitForEndOfFrame(); }
+        while (deleteTargets[0].BlockStatus != BlockStatus.DELETED) { yield return new WaitForEndOfFrame(); }
 
         // ブロック削除が完了しているのでステージの状態を書き換える
         for (int i = 0; i < deleteTargets.Length; i++)
@@ -629,7 +571,12 @@ public partial class MainGameSystem : MonoBehaviour {
 
         // 落下対象のブロックを落下させる
         for (int i = 0;i < falling.Length;i++) {
-            FallBlock(falling[i]);
+            // 移動先の座標と落下時間を計算
+            float nextPosY = spawner.GetInitPos.y - spawner.GetBlockSize.y * falling[i].BlockPosition.X;
+            Vector2 dest = new Vector2(falling[i].BlockTransform.anchoredPosition.x,nextPosY);
+            int distance = (int)(Mathf.Abs(nextPosY - falling[i].BlockTransform.anchoredPosition.y) / spawner.GetBlockSize.y);
+            // 指定した座標と時間で落下
+            StartCoroutine(falling[i].MoveBlock(dest, FallTime * distance));
         }
         //全ての落下中のブロックの移動が完了するまで待機
         for (int i = 0;i < falling.Length;) {
@@ -647,25 +594,6 @@ public partial class MainGameSystem : MonoBehaviour {
         {
             CheckDeleteBlocks();
         }
-        // これ以上削除するブロックが存在しない場合チェイン数を初期化
-        else
-        {
-            CurrentChainProp = 0;
-            ChainText.text = "";
-        }
-    }
-
-    // 指定したブロックを適切な位置まで落下させる
-    private void FallBlock(Block target)
-    {
-        float nextPosY = spawner.GetInitPos.y -spawner.GetBlockSize.y*target.BlockPosition.X;
-        int distance = (int)(Mathf.Abs(nextPosY - target.BlockTransform.anchoredPosition.y) / spawner.GetBlockSize.y);
-        //print(distance + "マス落下");
-        target.BlockTransform.DOLocalMoveY(nextPosY, FallTime*distance).OnComplete(() =>
-        {
-            // 移動後、状態を元に戻してやる
-            target.BlockStatus = BlockStatus.NORMAL;
-        });
     }
     #endregion
 
@@ -714,16 +642,4 @@ public partial class MainGameSystem : MonoBehaviour {
         }
     }
     #endregion
-
-
-    public int CurrentChainProp
-    {
-        get { return this.Chain; }
-        set { this.Chain = value; }
-    }
-    public int MaxChainProp
-    {
-        get { return this.MaxChain; }
-        set { this.MaxChain = value; }
-    }
 }

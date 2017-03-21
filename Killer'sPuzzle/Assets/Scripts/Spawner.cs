@@ -102,8 +102,8 @@ public class Spawner {
     private GameObject[] prefabs;
     // 親オブジェクトとなるCanvas
     private Transform parentCanvas;
-    // ブロック生成の始点[0,0] ブロック1枚の大きさ ステージ1枚分の大きさ
-    private Vector2 initPos, offset, stageScale;
+    // ブロック生成の始点[0,0] ブロック1枚の大きさ
+    private Vector2 initPos, offset;
     // ブロックの生成状況 次に生成するブロックを求めるのに使用
     private BlockInfo blockInfo;
 
@@ -114,7 +114,8 @@ public class Spawner {
         parentCanvas = GameObject.Find("Field").GetComponent<Transform>();
         // ステージの大きさなどの変数を計算
         initPos = new Vector2(-472.0f, 492.0f);
-        offset = new Vector2(Screen.width / StageSize, Screen.width / StageSize);
+        // ブロック1枚の大きさを取得
+        offset = objs[0].GetComponent<RectTransform>().sizeDelta;
         this.blockInfo = new BlockInfo(weight);
     }
 
