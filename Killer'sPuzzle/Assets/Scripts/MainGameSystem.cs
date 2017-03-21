@@ -278,7 +278,7 @@ public partial class MainGameSystem : MonoBehaviour {
             dest.BlockStatus = BlockStatus.NORMAL;
 
             // 縦横にselectedBlock,destBlockを基準にして走査
-            if (TraceBlocks())
+            if (TraceBlocks(selected) || TraceBlocks(dest))
             {
                 // 揃っている箇所があるならブロックを削除
                 CheckDeleteBlocks(selected, dest);
@@ -381,6 +381,73 @@ public partial class MainGameSystem : MonoBehaviour {
         }
         return existMatch;
     }
+    // ブロック入れ替え時に
+    private bool TraceBlocks(Block target)
+    {
+        bool existMatch = false;
+        Block origin;
+        // 上下に探索
+        for (int i = target.BlockPosition.X - 1; i < target.BlockPosition.X + 2; i++)
+        {
+            if ((i < StageSize && i + 1 > 0) && stage[i, target.BlockPosition.Y] != null)
+            {
+                origin = stage[i, target.BlockPosition.Y].GetComponent<Block>();
+                // 配列の外を探索しない,ブロックの状態がNORMALの場合
+                if (i + 1 < StageSize && i > 0 
+                    && origin.BlockStatus == BlockStatus.NORMAL)
+                {
+                    // 上下のブロックを探す
+                    if (stage[i + 1, target.BlockPosition.Y] != null && stage[i - 1, target.BlockPosition.Y] != null)
+                    {
+                        Block up = stage[i - 1,target.BlockPosition.Y].GetComponent<Block>();
+                        Block down = stage[i + 1, target.BlockPosition.Y].GetComponent<Block>();
+                        if (up.BlockStatus == BlockStatus.NORMAL && down.BlockStatus == BlockStatus.NORMAL)
+                        {
+                            // 左右のブロックが同じ色である場合,削除フラグを立てる
+                            if ((up.BlockType == origin.BlockType && down.BlockType == origin.BlockType))
+                            {
+                                existMatch = true;
+                                deleteTable[i, target.BlockPosition.Y] = true;
+                                deleteTable[i + 1, target.BlockPosition.Y] = true;
+                                deleteTable[i - 1, target.BlockPosition.Y] = true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // 左右に探索
+        for (int j = target.BlockPosition.Y - 1; j < target.BlockPosition.Y + 2; j++)
+        {
+            if ((j < StageSize && j + 1 > 0) && stage[target.BlockPosition.X, j] != null)
+            {
+                origin = stage[target.BlockPosition.X, j].GetComponent<Block>();
+                // 配列の外を探索しない,ブロックの状態がNORMALの場合
+                if (j + 1 < StageSize && j > 0
+                    && origin.BlockStatus == BlockStatus.NORMAL)
+                {
+                    // 左右のブロックを探す
+                    if (stage[target.BlockPosition.X,j - 1] != null && stage[target.BlockPosition.Y,j+1] != null)
+                    {
+                        Block left = stage[target.BlockPosition.X,j-1].GetComponent<Block>();
+                        Block right = stage[target.BlockPosition.X,j+1].GetComponent<Block>();
+                        if (left.BlockStatus == BlockStatus.NORMAL && right.BlockStatus == BlockStatus.NORMAL)
+                        {
+                            // 左右のブロックが同じ色である場合,削除フラグを立てる
+                            if ((left.BlockType == origin.BlockType && right.BlockType == origin.BlockType))
+                            {
+                                existMatch = true;
+                                deleteTable[target.BlockPosition.X, j] = true;
+                                deleteTable[target.BlockPosition.X, j - 1] = true;
+                                deleteTable[target.BlockPosition.X, j + 1] = true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return existMatch;
+    }
     // 削除フラグが立っているマス目のブロックを削除
     private void CheckDeleteBlocks()
     {
@@ -461,7 +528,7 @@ public partial class MainGameSystem : MonoBehaviour {
             Destroy(deleteTargets[i].BlockObject);
         }
         // 削除処理終了後ブロックの落下判定を行う
-        CheckFallBlocks();
+        StartCoroutine(CheckFallBlocks());
     }
     // ブロック削除アニメーション(ブロック入れ替え時)
     IEnumerator DeleteBlock(Block[] deleteTargets, Block selected, Block dest)
@@ -505,7 +572,7 @@ public partial class MainGameSystem : MonoBehaviour {
         if (dest != null)
             dest.BlockStatus = BlockStatus.NORMAL;
         // 削除処理終了後ブロックの落下判定を行う
-        CheckFallBlocks();
+        StartCoroutine(CheckFallBlocks());
 
     }
     #endregion
@@ -513,11 +580,13 @@ public partial class MainGameSystem : MonoBehaviour {
     // ブロック落下処理
     #region
     // 下のマスが空の箇所を探し、ブロックを落下させる
-    private void CheckFallBlocks()
+    IEnumerator CheckFallBlocks()
     {
         // ブロックの補充が必要な列を記録する配列
         bool[] ignoreSupply = new bool[StageSize];
         Block target;
+        // 落下中のブロック
+        Block[] falling = new Block[0];
         // 左の列から調べる
         for (int j = 0; j < StageSize; j++) {
             // 下の行から調べる
@@ -528,6 +597,9 @@ public partial class MainGameSystem : MonoBehaviour {
                     if (target.BlockStatus == BlockStatus.NORMAL)
                     {
                         target.BlockStatus = BlockStatus.FALLING;
+                        // 配列の大きさを調整,落下対象のブロックを格納
+                        Array.Resize<Block>(ref falling, falling.Length + 1);
+                        falling[falling.Length - 1] = target;
                         // 下のブロックが空で無くなるか配列の一番下まで
                         for (int x = i; x + 1 < StageSize; x++)
                         {
@@ -553,25 +625,34 @@ public partial class MainGameSystem : MonoBehaviour {
 
 
         // 次にブロックの補充が必要な位置にブロックを補充する
-        CheckEmptyBlocks(ignoreSupply);
+        CheckEmptyBlocks(ignoreSupply,ref falling);
 
-
-        for (int i = StageSize - 1; i + 1 > 0; i--) {
-            for (int j = 0; j < StageSize; j++)
+        // 落下対象のブロックを落下させる
+        for (int i = 0;i < falling.Length;i++) {
+            FallBlock(falling[i]);
+        }
+        //全ての落下中のブロックの移動が完了するまで待機
+        for (int i = 0;i < falling.Length;) {
+            // 落下中のブロックを見つけたら待機
+            while(falling[i].BlockStatus == BlockStatus.FALLING)
             {
-                if (stage[i, j] != null) {
-                    target = stage[i, j].GetComponent<Block>();
-                    if (target.BlockStatus == BlockStatus.FALLING)
-                    {
-                        //stage[i,j] = spawner.SupplyBlock(BlockStatus.FALLING,spawner.BlockInfoProp.CalcBlockType(),i,j,)
-                        //print("Fall target" + i + " : " + j);
-                        FallBlock(target);
-                    }
-                }
+                yield return new WaitForEndOfFrame();
             }
-        }            
-        /*全ての落下中のブロックの移動が完了するまで待機 いい方法が見つからない*/
+            i++;
+        }
 
+
+        // 落下終了後,もし削除するブロックが存在するなら削除
+        if (TraceBlocks())
+        {
+            CheckDeleteBlocks();
+        }
+        // これ以上削除するブロックが存在しない場合チェイン数を初期化
+        else
+        {
+            CurrentChainProp = 0;
+            ChainText.text = "";
+        }
     }
 
     // 指定したブロックを適切な位置まで落下させる
@@ -584,19 +665,6 @@ public partial class MainGameSystem : MonoBehaviour {
         {
             // 移動後、状態を元に戻してやる
             target.BlockStatus = BlockStatus.NORMAL;
-
-
-            // もし削除するブロックが存在するなら削除
-            if (TraceBlocks())
-            {
-                CheckDeleteBlocks();
-            }
-            // これ以上削除するブロックが存在しない場合チェイン数を初期化
-            else
-            {
-                CurrentChainProp = 0;
-                ChainText.text = "";
-            }
         });
     }
     #endregion
@@ -604,7 +672,7 @@ public partial class MainGameSystem : MonoBehaviour {
     // ブロック補充処理
     #region
     // ブロック補充位置を調べ、ブロックを補充する
-    private void CheckEmptyBlocks(bool[] ignore) {
+    private void CheckEmptyBlocks(bool[] ignore,ref Block[] falling) {
         // 縦方向にいくつブロックが連なっているか
         int connection= 0;
         // 左の列から探索
@@ -633,6 +701,9 @@ public partial class MainGameSystem : MonoBehaviour {
                             if (stage[x, j] == null)
                             {
                                 stage[x, j] = spawner.SupplyBlock(BlockStatus.FALLING, spawner.BlockInfoProp.CalcBlockType(), x, j, connection);
+                                // 補充されたブロックを落下中のブロックの配列に格納
+                                Array.Resize<Block>(ref falling, falling.Length + 1);
+                                falling[falling.Length - 1] = stage[x, j].GetComponent<Block>();
                             }
                         }
                         // 生成が終わったらconnectionの値を初期化
