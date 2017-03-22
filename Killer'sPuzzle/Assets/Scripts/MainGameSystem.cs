@@ -31,10 +31,6 @@ public partial class MainGameSystem : MonoBehaviour {
         deleteTable = new bool[StageSize, StageSize];
         spawner = new Spawner(ref blocks, StageSize, this.SpawnProbWeight);
         spawner.InitStage(ref stage);
-        // 初期の盤面で揃っているブロックが無くなるまで盤面を修正
-        for (; CheckStage();) {
-            CheckStage();
-        }
     }
 
     /// <summary>
@@ -87,57 +83,57 @@ public partial class MainGameSystem : MonoBehaviour {
 
     // 盤面初期化時の処理
     #region
-    // 初期の盤面で揃っている所があるかチェック
-    private bool CheckStage() {
-        bool existMatch = false;
-        // 比較元となるブロックの色
-        Block origin;
-        for (int i = 0; i < stage.GetLength(0); i++)
-        {
-            for (int j = 0; j < stage.GetLength(1); j++)
-            {
-                if (stage[i, j] != null)
-                {
-                    origin = stage[i, j].GetComponent<Block>();
-                    // 配列の外を探索しない
-                    if (j + 1 < StageSize && j > 0)
-                    {
-                        if (stage[i, j + 1] != null && stage[i, j - 1] != null)
-                        {
-                            // 左右のブロックが同じ色である場合,削除フラグを立てる
-                            if (stage[i, j + 1].GetComponent<Block>().BlockType == origin.BlockType && stage[i, j - 1].GetComponent<Block>().BlockType == origin.BlockType)
-                            {
-                                existMatch = true;
-                                ReplaceBlock(origin);
-                            }
-                        }
-                    }
-                    // 配列の外を探索しない
-                    if (i + 1 < StageSize && i > 0)
-                    {
-                        if (stage[i + 1, j] != null && stage[i - 1, j] != null)
-                        {
-                            // 上下のブロックが同じ色である場合,削除フラグを立てる
-                            if (stage[i + 1, j].GetComponent<Block>().BlockType == origin.BlockType && stage[i - 1, j].GetComponent<Block>().BlockType == origin.BlockType)
-                            {
-                                existMatch = true;
-                                ReplaceBlock(origin);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        return existMatch;
-    }
+    //// 初期の盤面で揃っている所があるかチェック
+    //private bool CheckStage() {
+    //    bool existMatch = false;
+    //    // 比較元となるブロックの色
+    //    Block origin;
+    //    for (int i = 0; i < stage.GetLength(0); i++)
+    //    {
+    //        for (int j = 0; j < stage.GetLength(1); j++)
+    //        {
+    //            if (stage[i, j] != null)
+    //            {
+    //                origin = stage[i, j].GetComponent<Block>();
+    //                // 配列の外を探索しない
+    //                if (j + 1 < StageSize && j > 0)
+    //                {
+    //                    if (stage[i, j + 1] != null && stage[i, j - 1] != null)
+    //                    {
+    //                        // 左右のブロックが同じ色である場合,削除フラグを立てる
+    //                        if (stage[i, j + 1].GetComponent<Block>().BlockType == origin.BlockType && stage[i, j - 1].GetComponent<Block>().BlockType == origin.BlockType)
+    //                        {
+    //                            existMatch = true;
+    //                            ReplaceBlock(origin);
+    //                        }
+    //                    }
+    //                }
+    //                // 配列の外を探索しない
+    //                if (i + 1 < StageSize && i > 0)
+    //                {
+    //                    if (stage[i + 1, j] != null && stage[i - 1, j] != null)
+    //                    {
+    //                        // 上下のブロックが同じ色である場合,削除フラグを立てる
+    //                        if (stage[i + 1, j].GetComponent<Block>().BlockType == origin.BlockType && stage[i - 1, j].GetComponent<Block>().BlockType == origin.BlockType)
+    //                        {
+    //                            existMatch = true;
+    //                            ReplaceBlock(origin);
+    //                        }
+    //                    }
+    //                }
+    //            }
+    //        }
+    //    }
+    //    return existMatch;
+    //}
 
-    private void ReplaceBlock(Block target) {
-        BlockPosition pos = target.BlockPosition;
-        BlockType type = target.BlockType;
-        Destroy(stage[pos.X, pos.Y]);
-        spawner.BlockInfoProp.UpdateBlockInfoOnDelete(type);
-        stage[pos.X, pos.Y] = spawner.GenerateBlock(BlockStatus.NORMAL, spawner.BlockInfoProp.CalcBlockType(type), pos.X, pos.Y);
-    }
+    //private void ReplaceBlock(Block target) {
+    //    BlockPosition pos = target.BlockPosition;
+    //    BlockType type = target.BlockType;
+    //    Destroy(stage[pos.X, pos.Y]);
+    //    spawner.BlockInfoProp.UpdateBlockInfoOnDelete(type);
+    //    stage[pos.X, pos.Y] = spawner.GenerateBlock(BlockStatus.NORMAL, spawner.BlockInfoProp.CalcBlockType(type), pos.X, pos.Y);
+    //}
     #endregion
 
     // ブロック入れ替え処理
@@ -594,6 +590,17 @@ public partial class MainGameSystem : MonoBehaviour {
         {
             CheckDeleteBlocks();
         }
+        // 削除するブロックが存在しない場合,詰み判定を行う
+        else
+        {
+            // 詰みなら盤面をリセットする
+            if (IsMating()) {
+                DestroyAll(ref stage);
+                // ブロックの数を初期化し盤面を再生成
+                spawner.BlockInfoProp.InitBlockInfo();
+                spawner.InitStage(ref stage);
+            }
+        }
     }
     #endregion
 
@@ -640,6 +647,100 @@ public partial class MainGameSystem : MonoBehaviour {
                 }
             }
         }
+    }
+    #endregion
+
+    // 詰み判定と詰み時の処理
+    #region
+    // 詰み状態ならtrueを返す
+    private bool IsMating() {
+        // ステージのブロックの色を配列に格納
+        BlockType[,] colors = new BlockType[StageSize, StageSize];
+        for(int i = 0;i < StageSize; i++)
+        {
+            for (int j = 0; j < StageSize; j++)
+            {
+                if(stage[i,j] != null)
+                    colors[i, j] = stage[i, j].GetComponent<Block>().BlockType;
+            }
+        }
+        for (int i = 0; i < StageSize; i++)
+        {
+            for (int j = 0; j < StageSize; j++)
+            {
+                // 上2マスが同じ色の場合
+                if (i - 1 > 0 && colors[i - 1, j] == colors[i - 2, j])
+                {
+                    // 左のマスが上2マスと同じ色の場合
+                    if (j > 0 && colors[i - 1, j] == colors[i, j - 1])
+                        return false;
+                    // 下のマスが上2マスと同じ色
+                    else if (i + 1 < StageSize && colors[i - 1, j] == colors[i + 1, j])
+                        return false;
+                    // 右のマスが上2マスと同じ色
+                    else if (j + 1 < StageSize && colors[i - 1, j] == colors[i, j + 1])
+                        return false;
+                }
+                //以下同様に判定を行う
+                // 左2マスが同じ色の場合
+                if (j - 1 > 0 && colors[i, j - 1] == colors[i, j - 2])
+                {
+                    if (i > 0 && colors[i, j - 1] == colors[i - 1, j])
+                        return false;
+                    else if (i + 1 < StageSize && colors[i, j - 1] == colors[i + 1, j])
+                        return false;
+                    else if (j + 1 < StageSize && colors[i, j - 1] == colors[i, j + 1])
+                        return false;
+                }
+                // 下2マスが同じ色の場合
+                if (i + 2 < StageSize && colors[i + 1, j] == colors[i + 2, j])
+                {
+                    if (i > 0 && colors[i + 1, j] == colors[i - 1, j])
+                        return false;
+                    else if (j > 0 && colors[i + 1, j] == colors[i, j - 1])
+                        return false;
+                    else if (j + 1 < StageSize && colors[i + 1, j] == colors[i, j + 1])
+                        return false;
+                }
+                // 右2マスが同じ色の場合
+                if (j + 2 < StageSize && colors[i, j + 1] == colors[i, j + 2])
+                {
+                    if (i > 0 && colors[i, j + 1] == colors[i - 1, j])
+                        return false;
+                    else if (j > 0 && colors[i, j + 1] == colors[i, j - 1])
+                        return false;
+                    else if (i + 1 < StageSize && colors[i, j + 1] == colors[i + 1, j])
+                        return false;
+                }
+                // 上下2マスが同じ色の場合
+                if ((i > 0 && i + 1 < StageSize) && colors[i - 1, j] == colors[i + 1, j])
+                {
+                    if (j > 0 && colors[i - 1, j] == colors[i, j - 1])
+                        return false;
+                    else if (j + 1 < StageSize && colors[i - 1, j] == colors[i, j + 1])
+                        return false;
+                }
+                // 左右2マスが同じ色の場合
+                if ((j > 0 && j + 1 < StageSize) && colors[i, j - 1] == colors[i, j + 1])
+                {
+                    if (i > 0 && colors[i, j - 1] == colors[i - 1, j])
+                        return false;
+                    else if (i + 1 < StageSize && colors[i, j - 1] == colors[i + 1, j])
+                        return false;
+                }
+            }
+        }
+        // 上の処理を抜けたら詰み状態
+        return true;
+    }
+    private void DestroyAll(ref GameObject[,] stage)
+    {
+        for (int i = 0; i < StageSize; i++) {
+            for (int j = 0; j < StageSize; j++) {
+                Destroy(stage[i, j]);
+            }
+        }
+        print("mated InitializingStage");
     }
     #endregion
 }

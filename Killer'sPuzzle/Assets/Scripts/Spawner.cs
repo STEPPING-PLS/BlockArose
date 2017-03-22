@@ -17,13 +17,24 @@ public class BlockInfo {
     public BlockInfo(int probWeight) {
         blockTypes = Enum.GetNames(typeof(BlockType)).Length;
         blockNums = new byte[blockTypes];
+        //for (int i = 0; i < blockNums.Length; i++)
+        //{
+        //    blockNums[i] = 0;
+        //}
+        //totalNum = 0;
+        //average = 0;
+        weight = probWeight;
+        InitBlockInfo();
+    }
+    // 盤面のブロックの数を初期化する関数
+    public void InitBlockInfo()
+    {
         for (int i = 0; i < blockNums.Length; i++)
         {
             blockNums[i] = 0;
         }
         totalNum = 0;
         average = 0;
-        weight = probWeight;
     }
 
     #region
@@ -106,10 +117,11 @@ public class Spawner {
     private Vector2 initPos, offset;
     // ブロックの生成状況 次に生成するブロックを求めるのに使用
     private BlockInfo blockInfo;
-
+    // ステージの縦横の長さ
     private int StageSize;
     // MainGameSystemからprefabの参照先を取得
     public Spawner(ref GameObject[] objs,int StageSize,int weight) {
+        this.StageSize = StageSize;
         prefabs = objs;
         parentCanvas = GameObject.Find("Field").GetComponent<Transform>();
         // ステージの大きさなどの変数を計算
@@ -128,6 +140,9 @@ public class Spawner {
                 stage[i, j] = GenerateBlock(status[i, j], blockInfo.CalcBlockType(), i, j);
             }
         }
+        // 初期の盤面で揃っているブロックが無くなるまで盤面を修正
+        for (; CheckStage(ref stage);)
+            CheckStage(ref stage);
     }
     // FORDEBUG 使用できないマスがない場合
     public void InitStage(ref GameObject[,] stage)
@@ -139,6 +154,61 @@ public class Spawner {
                 stage[i, j] = GenerateBlock(BlockStatus.NORMAL, blockInfo.CalcBlockType(), i, j);
             }
         }
+        // 初期の盤面で揃っているブロックが無くなるまで盤面を修正
+        for (; CheckStage(ref stage);)
+            CheckStage(ref stage);
+    }
+    // 初期の盤面で揃っている所があるかチェック
+    private bool CheckStage(ref GameObject[,] stage)
+    {
+        bool existMatch = false;
+        // 比較元となるブロックの色
+        Block origin;
+        for (int i = 0; i < stage.GetLength(0); i++)
+        {
+            for (int j = 0; j < stage.GetLength(1); j++)
+            {
+                if (stage[i, j] != null)
+                {
+                    origin = stage[i, j].GetComponent<Block>();
+                    // 配列の外を探索しない
+                    if (j + 1 < StageSize && j > 0)
+                    {
+                        if (stage[i, j + 1] != null && stage[i, j - 1] != null)
+                        {
+                            // 左右のブロックが同じ色である場合,削除フラグを立てる
+                            if (stage[i, j + 1].GetComponent<Block>().BlockType == origin.BlockType && stage[i, j - 1].GetComponent<Block>().BlockType == origin.BlockType)
+                            {
+                                existMatch = true;
+                                ReplaceBlock(origin,ref stage);
+                            }
+                        }
+                    }
+                    // 配列の外を探索しない
+                    if (i + 1 < StageSize && i > 0)
+                    {
+                        if (stage[i + 1, j] != null && stage[i - 1, j] != null)
+                        {
+                            // 上下のブロックが同じ色である場合,削除フラグを立てる
+                            if (stage[i + 1, j].GetComponent<Block>().BlockType == origin.BlockType && stage[i - 1, j].GetComponent<Block>().BlockType == origin.BlockType)
+                            {
+                                existMatch = true;
+                                ReplaceBlock(origin,ref stage);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return existMatch;
+    }
+    private void ReplaceBlock(Block target,ref GameObject[,]stage)
+    {
+        BlockPosition pos = target.BlockPosition;
+        BlockType type = target.BlockType;
+        UnityEngine.Object.Destroy(stage[pos.X, pos.Y]);
+        this.BlockInfoProp.UpdateBlockInfoOnDelete(type);
+        stage[pos.X, pos.Y] = this.GenerateBlock(BlockStatus.NORMAL, this.BlockInfoProp.CalcBlockType(type), pos.X, pos.Y);
     }
     #endregion
 
