@@ -7,31 +7,38 @@ public class GameController : MonoBehaviour {
     [SerializeField]
     private GameObject OptionBoard;
 
-	public void ShiftState(GameState st)
+	public void ShiftState(int id)
     {
-        // 状態変更
-        GameManager.Instance.State = st;
 
         // 状態変更によるシーン切り替えなど
-        switch (st)
+        switch (id)
         {
-            case GameState.TITLE:
+            // GAME STATE -> TITLE
+            case 0:
                 SceneManager.LoadSceneAsync(0);
                 break;
-            case GameState.OPTION:
+            // GAME STATE -> OPTION
+            case 1:
                 Instantiate(this.OptionBoard);
                 break;
-            case GameState.RANKING:
+            // GAME STATE -> RANKING
+            case 2:
                 SceneManager.LoadSceneAsync(1);
                 break;
-            case GameState.MAIN:
+            // GAME STATE -> MAIN
+            case 3:
                 SceneManager.LoadSceneAsync(2);
                 break;
-            case GameState.RESULT:
+            // GAME STATE -> RESULT
+            case 4:
                 SceneManager.LoadSceneAsync(3);
                 break;
             default:
                 break;
         }
+
+        // 状態変更
+        GameManager.Instance.State = (GameState)id;
     }
+
 }
