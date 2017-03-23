@@ -21,7 +21,7 @@ public class ChainManager : MonoBehaviour {
 	}
 
     // チェイン数加算処理
-    public void PlusChainNum() {
+    public void AddChainNum() {
         this.CurrentChainProp++;
         this.ChainText.text = "Chain " + this.CurrentChainProp;
         if (this.CurrentChainProp > this.MaxChainProp)

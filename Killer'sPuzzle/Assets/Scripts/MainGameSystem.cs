@@ -1,6 +1,5 @@
-﻿using UnityEngine;
-using UnityEngine.UI;
-using DG.Tweening;
+﻿#define DEBUG
+using UnityEngine;
 using System;
 using System.Collections;
 
@@ -12,7 +11,7 @@ public partial class MainGameSystem : MonoBehaviour {
      * ↓→Y
      * X
      */
-    private GameObject[,] stage;
+    public GameObject[,] stage;
     private bool[,] deleteTable;
     // パズル生成クラス
     private Spawner spawner;
@@ -22,15 +21,31 @@ public partial class MainGameSystem : MonoBehaviour {
     // チェイン管理クラス
     [SerializeField]
     private ChainManager chainManager;
+    // スコア管理クラス
+    [SerializeField]
+    private ScoreManager scoreManager;
+
+#if DEBUG
+    // ステージ上のブロックの個数を表示
+    [SerializeField]
+    private int TotalNum;
+    [SerializeField]
+    private byte[] blockNums;
+#endif
 
     // Use this for initialization
     void Start() {
         turnManager = this.gameObject.GetComponent<TurnManager>();
         chainManager = this.gameObject.GetComponent<ChainManager>();
+        scoreManager = this.gameObject.GetComponent<ScoreManager>();
         stage = new GameObject[StageSize, StageSize];
         deleteTable = new bool[StageSize, StageSize];
         spawner = new Spawner(ref blocks, StageSize, this.SpawnProbWeight);
         spawner.InitStage(ref stage);
+#if DEBUG
+        TotalNum = spawner.BlockInfoProp.GetTotalNum;
+        blockNums = spawner.BlockInfoProp.GetBlockNums;
+#endif
     }
 
     /// <summary>
@@ -81,64 +96,9 @@ public partial class MainGameSystem : MonoBehaviour {
             StartCoroutine(SwitchBlock(selectedBlock, destBlock));
     }
 
-    // 盤面初期化時の処理
-    #region
-    //// 初期の盤面で揃っている所があるかチェック
-    //private bool CheckStage() {
-    //    bool existMatch = false;
-    //    // 比較元となるブロックの色
-    //    Block origin;
-    //    for (int i = 0; i < stage.GetLength(0); i++)
-    //    {
-    //        for (int j = 0; j < stage.GetLength(1); j++)
-    //        {
-    //            if (stage[i, j] != null)
-    //            {
-    //                origin = stage[i, j].GetComponent<Block>();
-    //                // 配列の外を探索しない
-    //                if (j + 1 < StageSize && j > 0)
-    //                {
-    //                    if (stage[i, j + 1] != null && stage[i, j - 1] != null)
-    //                    {
-    //                        // 左右のブロックが同じ色である場合,削除フラグを立てる
-    //                        if (stage[i, j + 1].GetComponent<Block>().BlockType == origin.BlockType && stage[i, j - 1].GetComponent<Block>().BlockType == origin.BlockType)
-    //                        {
-    //                            existMatch = true;
-    //                            ReplaceBlock(origin);
-    //                        }
-    //                    }
-    //                }
-    //                // 配列の外を探索しない
-    //                if (i + 1 < StageSize && i > 0)
-    //                {
-    //                    if (stage[i + 1, j] != null && stage[i - 1, j] != null)
-    //                    {
-    //                        // 上下のブロックが同じ色である場合,削除フラグを立てる
-    //                        if (stage[i + 1, j].GetComponent<Block>().BlockType == origin.BlockType && stage[i - 1, j].GetComponent<Block>().BlockType == origin.BlockType)
-    //                        {
-    //                            existMatch = true;
-    //                            ReplaceBlock(origin);
-    //                        }
-    //                    }
-    //                }
-    //            }
-    //        }
-    //    }
-    //    return existMatch;
-    //}
-
-    //private void ReplaceBlock(Block target) {
-    //    BlockPosition pos = target.BlockPosition;
-    //    BlockType type = target.BlockType;
-    //    Destroy(stage[pos.X, pos.Y]);
-    //    spawner.BlockInfoProp.UpdateBlockInfoOnDelete(type);
-    //    stage[pos.X, pos.Y] = spawner.GenerateBlock(BlockStatus.NORMAL, spawner.BlockInfoProp.CalcBlockType(type), pos.X, pos.Y);
-    //}
-    #endregion
-
     // ブロック入れ替え処理
     #region
-    IEnumerator SwitchBlock(Block selected, Block dest)
+    public IEnumerator SwitchBlock(Block selected, Block dest)
     {
         //ブロックの状態を変える
         selected.BlockStatus = BlockStatus.SWTCHING;
@@ -179,7 +139,7 @@ public partial class MainGameSystem : MonoBehaviour {
         /**********この辺でパズル入れ替えアニメーションなどを挟む*************/
     }
     // ブロックが揃ってない時元に戻す処理
-    IEnumerator RevertBlock(Block selected, Block dest) {
+    public IEnumerator RevertBlock(Block selected, Block dest) {
         // ブロックの状態を移動中のものに変える
         selected.BlockStatus = BlockStatus.SWTCHING;
         dest.BlockStatus = BlockStatus.SWTCHING;
@@ -209,7 +169,7 @@ public partial class MainGameSystem : MonoBehaviour {
     }
     #endregion
 
-    // ブロック走査、削除処理
+    // ブロック走査、削除,スコア,チェイン処理
     #region
     // 両隣が同じ色のブロックを探索する
     private bool TraceBlocks()
@@ -347,7 +307,7 @@ public partial class MainGameSystem : MonoBehaviour {
         if (turnManager.ChainTimerProp > 0)
         {
             // チェイン継続処理
-            chainManager.PlusChainNum();
+            chainManager.AddChainNum();
             // タイマーにチェイン継続時間をセットする
             turnManager.SetChainTimer(DeleteTime + FallTime*GetVerticalMatch());
         }
@@ -371,6 +331,10 @@ public partial class MainGameSystem : MonoBehaviour {
                 }
             }
         }
+
+        // 現在のチェイン数と消したブロック数に応じてスコアを加算
+        scoreManager.AddScore(chainManager.CurrentChainProp, targets.Length);
+
         // 削除対象のブロックが存在するなら削除
         if (targets.Length > 2) {
             StartCoroutine(DeleteBlock(targets));
@@ -386,7 +350,7 @@ public partial class MainGameSystem : MonoBehaviour {
         if (turnManager.ChainTimerProp > 0)
         {
             // チェイン継続処理
-            chainManager.PlusChainNum();
+            chainManager.AddChainNum();
             // タイマーにチェイン継続時間をセットする
             turnManager.SetChainTimer(DeleteTime + FallTime * GetVerticalMatch());
         }
@@ -412,6 +376,10 @@ public partial class MainGameSystem : MonoBehaviour {
                 }
             }
         }
+
+        // 現在のチェイン数と消したブロック数に応じてスコアを加算
+        scoreManager.AddScore(chainManager.CurrentChainProp, targets.Length);
+
         // 削除対象のブロックが存在するなら削除
         if (targets.Length > 2)
         {
@@ -596,6 +564,8 @@ public partial class MainGameSystem : MonoBehaviour {
             // 詰みなら盤面をリセットする
             if (IsMating()) {
                 DestroyAll(ref stage);
+                // ボーナス得点を加算
+                scoreManager.AddBonusScore();
                 // ブロックの数を初期化し盤面を再生成
                 spawner.BlockInfoProp.InitBlockInfo();
                 spawner.InitStage(ref stage);
@@ -743,4 +713,5 @@ public partial class MainGameSystem : MonoBehaviour {
         print("mated InitializingStage");
     }
     #endregion
+
 }

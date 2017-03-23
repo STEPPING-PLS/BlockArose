@@ -106,6 +106,16 @@ public class BlockInfo {
         totalNum--;
     }
 
+
+    // プロパティ
+    #region
+    public int GetTotalNum{
+        get { return totalNum; }
+    }
+    public byte[] GetBlockNums {
+        get { return blockNums; }
+    }
+    #endregion
 }
 public class Spawner {
 
@@ -124,10 +134,10 @@ public class Spawner {
         this.StageSize = StageSize;
         prefabs = objs;
         parentCanvas = GameObject.Find("Field").GetComponent<Transform>();
-        // ステージの大きさなどの変数を計算
-        initPos = new Vector2(-472.0f, 492.0f);
         // ブロック1枚の大きさを取得
         offset = objs[0].GetComponent<RectTransform>().sizeDelta;
+        // 左上のブロック生成位置を計算
+        initPos = new Vector2(-960+offset.x/2,540-offset.y/2);
         this.blockInfo = new BlockInfo(weight);
     }
 
